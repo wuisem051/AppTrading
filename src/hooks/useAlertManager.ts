@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import type { PriceZoneAlert, VolatilityAlertEvent } from '../types/trading';
 import { soundManager, sendBrowserNotification } from '../utils/audioAlerts';
+import { 
+  subscribeToPriceZones, 
+  savePriceZoneToDb, 
+  togglePriceZoneInDb, 
+  deletePriceZoneFromDb, 
+  logAlertHistory 
+} from '../services/dbService';
 
 const ZONES_STORAGE_KEY = 'arpa_trader_zones_v1';
 
 export function useAlertManager(currentPrice: number | undefined) {
-  // 1. Price Zones State
+  // 1. Price Zones State (iniciando con localStorage como fallback instantáneo)
   const [zones, setZones] = useState<PriceZoneAlert[]>(() => {
     try {
       const saved = localStorage.getItem(ZONES_STORAGE_KEY);
@@ -13,7 +20,6 @@ export function useAlertManager(currentPrice: number | undefined) {
     } catch {
       // fallback
     }
-    // Default zones for initial showcase
     return [
       { id: '1', label: 'Resistencia Clave', price: 0.05500, type: 'resistance', active: true, createdAt: Date.now() },
       { id: '2', label: 'Soporte Mayor', price: 0.04800, type: 'support', active: true, createdAt: Date.now() },
@@ -30,12 +36,26 @@ export function useAlertManager(currentPrice: number | undefined) {
   const lastPriceRef = useRef<number | undefined>(undefined);
   const audioUnlockedRef = useRef<boolean>(false);
 
-  // Save zones to localStorage
+  // 3. Sincronización bidireccional en tiempo real con Cloud Firestore
+  useEffect(() => {
+    const unsubscribe = subscribeToPriceZones((cloudZones) => {
+      if (cloudZones && cloudZones.length > 0) {
+        setZones(cloudZones);
+        localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(cloudZones));
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, []);
+
+  // Save zones to localStorage as local cache
   useEffect(() => {
     localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(zones));
   }, [zones]);
 
-  // Audio unlock helper for mobile browsers (user interaction requirement)
+  // Audio unlock helper for mobile browsers
   const unlockAudio = () => {
     if (!audioUnlockedRef.current) {
       soundManager.playZoneAlert('support');
@@ -43,8 +63,8 @@ export function useAlertManager(currentPrice: number | undefined) {
     }
   };
 
-  // Add a new zone
-  const addZone = (price: number, type: 'support' | 'resistance', label?: string) => {
+  // Add a new zone (Local + Cloud Firestore)
+  const addZone = async (price: number, type: 'support' | 'resistance', label?: string) => {
     const newZone: PriceZoneAlert = {
       id: Math.random().toString(36).substring(2, 9),
       price,
@@ -53,20 +73,30 @@ export function useAlertManager(currentPrice: number | undefined) {
       active: true,
       createdAt: Date.now()
     };
+    
+    // Actualización optimista local
     setZones(prev => [newZone, ...prev]);
+    // Persistencia en Firebase
+    await savePriceZoneToDb(newZone);
   };
 
-  // Toggle zone active status
-  const toggleZone = (id: string) => {
-    setZones(prev => prev.map(z => z.id === id ? { ...z, active: !z.active } : z));
+  // Toggle zone active status (Local + Cloud Firestore)
+  const toggleZone = async (id: string) => {
+    const target = zones.find(z => z.id === id);
+    if (!target) return;
+    const nextState = !target.active;
+
+    setZones(prev => prev.map(z => z.id === id ? { ...z, active: nextState } : z));
+    await togglePriceZoneInDb(id, nextState);
   };
 
-  // Delete a zone
-  const deleteZone = (id: string) => {
+  // Delete a zone (Local + Cloud Firestore)
+  const deleteZone = async (id: string) => {
     setZones(prev => prev.filter(z => z.id !== id));
+    await deletePriceZoneFromDb(id);
   };
 
-  // 3. Evaluate Alerts on price tick
+  // 4. Evaluate Alerts on price tick
   useEffect(() => {
     if (!currentPrice || currentPrice <= 0) return;
     const now = Date.now();
@@ -107,6 +137,9 @@ export function useAlertManager(currentPrice: number | undefined) {
           sendBrowserNotification(`⚡ Alerta de Volatilidad: ARPA/USDT`, {
             body: `${direction === 'pump' ? '🚀 PUMP' : '🔻 DUMP'}: ${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}% en ${alertEvent.durationSeconds}s ($${currentPrice})`
           });
+
+          // Registrar en la base de datos de Firebase
+          logAlertHistory(alertEvent);
         }
       }
     }
@@ -131,8 +164,17 @@ export function useAlertManager(currentPrice: number | undefined) {
             body: `Precio actual: $${currentPrice.toFixed(5)} tocó tu nivel marcado de $${zone.price.toFixed(5)}.`
           });
 
-          // Deactivate zone temporarily or mark as triggered to avoid loop
+          // Registrar en el historial de Firebase
+          logAlertHistory({
+            type: 'zone_trigger',
+            zoneLabel: zone.label,
+            price: zone.price,
+            timestamp: now
+          });
+
+          // Deactivate zone en local y en Firestore
           setZones(prevList => prevList.map(z => z.id === zone.id ? { ...z, active: false, triggeredAt: now } : z));
+          togglePriceZoneInDb(zone.id, false, now);
         }
       });
     }
