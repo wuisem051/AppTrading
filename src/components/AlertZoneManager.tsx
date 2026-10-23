@@ -38,7 +38,8 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
     e.preventDefault();
     const parsed = parseFloat(priceInput);
     if (!isNaN(parsed) && parsed > 0) {
-      onAddZone(parsed, zoneType, labelInput);
+      const defaultLabel = `${zoneType === 'support' ? 'Soporte' : 'Resistencia'} @ ${parsed.toFixed(5)}`;
+      onAddZone(parsed, zoneType, labelInput.trim() || defaultLabel);
       setPriceInput('');
       setLabelInput('');
     }

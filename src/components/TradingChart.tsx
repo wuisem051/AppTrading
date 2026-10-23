@@ -32,6 +32,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const priceLinesRef = useRef<{ [key: string]: ReturnType<ISeriesApi<'Candlestick'>['createPriceLine']> }>({});
+  const onAddZoneByClickRef = useRef(onAddZoneByClick);
+  onAddZoneByClickRef.current = onAddZoneByClick;
 
   // 1. Initialize Chart
   useEffect(() => {
@@ -94,10 +96,10 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
     // Click handler on chart to add zone at clicked price
     chart.subscribeClick((param) => {
-      if (param.point && onAddZoneByClick) {
+      if (param.point && onAddZoneByClickRef.current) {
         const coordinatePrice = series.coordinateToPrice(param.point.y);
         if (coordinatePrice !== null && coordinatePrice > 0) {
-          onAddZoneByClick(coordinatePrice);
+          onAddZoneByClickRef.current(coordinatePrice);
         }
       }
     });

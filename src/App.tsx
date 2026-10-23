@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useBinanceTrading } from './hooks/useBinanceTrading';
 import { useAlertManager } from './hooks/useAlertManager';
 import { HeaderTicker } from './components/HeaderTicker';
@@ -35,12 +35,16 @@ export function App() {
     unlockAudio
   } = useAlertManager(ticker?.price);
 
+  const tickerRef = useRef(ticker);
+  tickerRef.current = ticker;
+
   const handleChartClickAdd = (price: number) => {
     unlockAudio();
     const roundedPrice = Number(price.toFixed(5));
-    const current = ticker?.price ?? 0;
-    const type = roundedPrice >= current ? 'resistance' : 'support';
-    addZone(roundedPrice, type, `Nivel Gráfico ${type === 'resistance' ? 'Res' : 'Sop'}`);
+    const current = tickerRef.current?.price ?? 0;
+    const isSupport = roundedPrice < current;
+    const type = isSupport ? 'support' : 'resistance';
+    addZone(roundedPrice, type, isSupport ? 'Soporte Gráfico' : 'Resistencia Gráfica');
   };
 
   const handleQuickAdd = (price: number) => {
