@@ -1,5 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getFirestore } from 'firebase/firestore';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -12,10 +13,13 @@ const firebaseConfig = {
   measurementId: "G-Q3LBE2ZJB5"
 };
 
-// Initialize Firebase
+// Initialize Firebase App
 export const app = initializeApp(firebaseConfig);
 
-// Initialize Analytics conditionally (only in supported browser environments)
+// Initialize Cloud Firestore
+export const db = getFirestore(app);
+
+// Initialize Analytics conditionally (safe for browser & PWA/mobile environments)
 export const initAnalytics = async () => {
   if (typeof window !== 'undefined' && await isSupported()) {
     return getAnalytics(app);
