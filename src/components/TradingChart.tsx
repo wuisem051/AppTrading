@@ -16,6 +16,7 @@ interface TradingChartProps {
   onTimeframeChange: (tf: Timeframe) => void;
   zones: PriceZoneAlert[];
   onAddZoneByClick?: (price: number) => void;
+  precision?: number;
 }
 
 const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
@@ -26,7 +27,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   timeframe,
   onTimeframeChange,
   zones,
-  onAddZoneByClick
+  onAddZoneByClick,
+  precision = 4
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -86,8 +88,8 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       wickDownColor: '#f43f5e',
       priceFormat: {
         type: 'price',
-        precision: 5,
-        minMove: 0.00001,
+        precision: precision,
+        minMove: 1 / Math.pow(10, precision),
       },
     });
 
@@ -122,6 +124,18 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       chart.remove();
     };
   }, []);
+
+  // 1b. Update precision if pair changes
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    seriesRef.current.applyOptions({
+      priceFormat: {
+        type: 'price',
+        precision: precision,
+        minMove: 1 / Math.pow(10, precision),
+      }
+    });
+  }, [precision]);
 
   // 2. Feed historical candles
   useEffect(() => {

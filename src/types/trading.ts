@@ -20,6 +20,34 @@ export interface KlineCandle {
   volume: number;
 }
 
+export interface TradingPairConfig {
+  id: string;          // e.g. 'BELUSDT'
+  baseAsset: string;   // 'BEL'
+  quoteAsset: string;  // 'USDT'
+  label: string;       // 'BEL/USDT'
+  streamName: string;  // 'belusdt'
+  precision: number;   // 4 or 5
+}
+
+export const SUPPORTED_PAIRS: TradingPairConfig[] = [
+  {
+    id: 'BELUSDT',
+    baseAsset: 'BEL',
+    quoteAsset: 'USDT',
+    label: 'BEL/USDT',
+    streamName: 'belusdt',
+    precision: 4
+  },
+  {
+    id: 'ARPAUSDT',
+    baseAsset: 'ARPA',
+    quoteAsset: 'USDT',
+    label: 'ARPA/USDT',
+    streamName: 'arpausdt',
+    precision: 5
+  }
+];
+
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
 export interface PriceZoneAlert {

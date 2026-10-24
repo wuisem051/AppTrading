@@ -5,10 +5,12 @@ import { HeaderTicker } from './components/HeaderTicker';
 import { TradingChart } from './components/TradingChart';
 import { AlertZoneManager } from './components/AlertZoneManager';
 import { NotificationBanner } from './components/NotificationBanner';
-import type { Timeframe } from './types/trading';
+import type { Timeframe, TradingPairConfig } from './types/trading';
+import { SUPPORTED_PAIRS } from './types/trading';
 import { soundManager } from './utils/audioAlerts';
 
 export function App() {
+  const [selectedPair, setSelectedPair] = useState<TradingPairConfig>(SUPPORTED_PAIRS[0]); // Defaults to BEL/USDT
   const [timeframe, setTimeframe] = useState<Timeframe>('1m');
 
   // Real-time Binance Feed
@@ -18,7 +20,7 @@ export function App() {
     currentCandle,
     isConnected,
     latency
-  } = useBinanceTrading(timeframe);
+  } = useBinanceTrading(selectedPair, timeframe);
 
   // Dynamic Support/Resistance & Volatility Alert Manager
   const {
@@ -33,24 +35,24 @@ export function App() {
     activeZoneAlert,
     dismissZoneAlert,
     unlockAudio
-  } = useAlertManager(ticker?.price);
+  } = useAlertManager(ticker?.price, selectedPair);
 
   const tickerRef = useRef(ticker);
   tickerRef.current = ticker;
 
   const handleChartClickAdd = (price: number) => {
     unlockAudio();
-    const roundedPrice = Number(price.toFixed(5));
+    const roundedPrice = Number(price.toFixed(selectedPair.precision));
     const current = tickerRef.current?.price ?? 0;
     const isSupport = roundedPrice < current;
     const type = isSupport ? 'support' : 'resistance';
-    addZone(roundedPrice, type, isSupport ? 'Soporte Gráfico' : 'Resistencia Gráfica');
+    addZone(roundedPrice, type, isSupport ? `Soporte ${selectedPair.baseAsset}` : `Resistencia ${selectedPair.baseAsset}`);
   };
 
   const handleQuickAdd = (price: number) => {
     unlockAudio();
-    const roundedPrice = Number(price.toFixed(5));
-    addZone(roundedPrice, 'resistance', 'Nivel Rápido');
+    const roundedPrice = Number(price.toFixed(selectedPair.precision));
+    addZone(roundedPrice, 'resistance', `Nivel Rápido ${selectedPair.baseAsset}`);
   };
 
   const handleTestAudio = () => {
@@ -62,11 +64,13 @@ export function App() {
       onClick={unlockAudio} 
       className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white"
     >
-      {/* 1. Header de Estado en Vivo (Estilo Reloj & Ticker Binance) */}
+      {/* 1. Header de Estado en Vivo (Estilo Reloj & Ticker Binance con Selector) */}
       <HeaderTicker
         ticker={ticker}
         isConnected={isConnected}
         latency={latency}
+        selectedPair={selectedPair}
+        onSelectPair={setSelectedPair}
         onQuickZoneAdd={handleQuickAdd}
         onTestAudio={handleTestAudio}
       />
@@ -83,6 +87,7 @@ export function App() {
             onTimeframeChange={setTimeframe}
             zones={zones}
             onAddZoneByClick={handleChartClickAdd}
+            precision={selectedPair.precision}
           />
         </section>
 
@@ -96,6 +101,8 @@ export function App() {
             onDeleteZone={deleteZone}
             volatilityThreshold={volatilityThreshold}
             onChangeVolatilityThreshold={setVolatilityThreshold}
+            precision={selectedPair.precision}
+            baseAsset={selectedPair.baseAsset}
           />
         </aside>
 
@@ -107,6 +114,8 @@ export function App() {
         zoneAlert={activeZoneAlert}
         onDismissVolatility={dismissVolatilityAlert}
         onDismissZone={dismissZoneAlert}
+        pairLabel={selectedPair.label}
+        precision={selectedPair.precision}
       />
 
       {/* Footer Status Bar */}

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { TickerData, KlineCandle, Timeframe } from '../types/trading';
+import type { TickerData, KlineCandle, Timeframe, TradingPairConfig } from '../types/trading';
+import { SUPPORTED_PAIRS } from '../types/trading';
 
-const SYMBOL_LOWER = 'arpausdt';
-const SYMBOL_UPPER = 'ARPAUSDT';
 const REST_BASE = 'https://api.binance.com/api/v3';
 const WS_BASE = 'wss://stream.binance.com:9443/ws';
 
-export function useBinanceTrading(timeframe: Timeframe = '1m') {
+export function useBinanceTrading(
+  pair: TradingPairConfig = SUPPORTED_PAIRS[0],
+  timeframe: Timeframe = '1m'
+) {
   const [ticker, setTicker] = useState<TickerData | null>(null);
   const [candles, setCandles] = useState<KlineCandle[]>([]);
   const [currentCandle, setCurrentCandle] = useState<KlineCandle | null>(null);
@@ -18,9 +20,9 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
   const reconnectTimeoutRef = useRef<number | null>(null);
 
   // 1. Fetch initial historical klines from REST API
-  const fetchHistoricalCandles = useCallback(async (interval: string) => {
+  const fetchHistoricalCandles = useCallback(async (interval: string, symbol: string) => {
     try {
-      const response = await fetch(`${REST_BASE}/klines?symbol=${SYMBOL_UPPER}&interval=${interval}&limit=500`);
+      const response = await fetch(`${REST_BASE}/klines?symbol=${symbol}&interval=${interval}&limit=500`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
       
@@ -38,21 +40,21 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
         setCurrentCandle(parsedCandles[parsedCandles.length - 1]);
       }
     } catch (err) {
-      console.error('Error fetching historical candles from Binance REST:', err);
+      console.error(`Error fetching historical candles for ${symbol}:`, err);
     }
   }, []);
 
   // 2. Fetch initial 24h ticker data
-  const fetchInitialTicker = useCallback(async () => {
+  const fetchInitialTicker = useCallback(async (pairConfig: TradingPairConfig) => {
     try {
-      const response = await fetch(`${REST_BASE}/ticker/24hr?symbol=${SYMBOL_UPPER}`);
+      const response = await fetch(`${REST_BASE}/ticker/24hr?symbol=${pairConfig.id}`);
       if (!response.ok) return;
       const d = await response.json();
       const currentPrice = parseFloat(d.lastPrice);
       prevPriceRef.current = currentPrice;
 
       setTicker({
-        symbol: 'ARPA/USDT',
+        symbol: pairConfig.label,
         price: currentPrice,
         priceChange: parseFloat(d.priceChange),
         priceChangePercent: parseFloat(d.priceChangePercent),
@@ -64,21 +66,27 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
         tickDirection: 'neutral'
       });
     } catch (err) {
-      console.error('Error fetching initial 24h ticker:', err);
+      console.error(`Error fetching initial 24h ticker for ${pairConfig.id}:`, err);
     }
   }, []);
 
   // 3. Connect Multi-Stream WebSocket (ticker + klines)
   useEffect(() => {
-    fetchInitialTicker();
-    fetchHistoricalCandles(timeframe);
+    // Reset previous stream data when switching pair or timeframe
+    prevPriceRef.current = null;
+    setTicker(null);
+    setCandles([]);
+    setCurrentCandle(null);
+
+    fetchInitialTicker(pair);
+    fetchHistoricalCandles(timeframe, pair.id);
 
     let active = true;
 
     const connectWs = () => {
       // Connect to combined stream: <symbol>@ticker / <symbol>@kline_<timeframe>
-      // wss://stream.binance.com:9443/ws/arpausdt@ticker/arpausdt@kline_1m
-      const streamUrl = `${WS_BASE}/${SYMBOL_LOWER}@ticker/${SYMBOL_LOWER}@kline_${timeframe}`;
+      // e.g. wss://stream.binance.com:9443/ws/belusdt@ticker/belusdt@kline_1m
+      const streamUrl = `${WS_BASE}/${pair.streamName}@ticker/${pair.streamName}@kline_${timeframe}`;
       const ws = new WebSocket(streamUrl);
       wsRef.current = ws;
 
@@ -105,7 +113,7 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
             prevPriceRef.current = newPrice;
 
             setTicker({
-              symbol: 'ARPA/USDT',
+              symbol: pair.label,
               price: newPrice,
               priceChange: parseFloat(data.p),
               priceChangePercent: parseFloat(data.P),
@@ -147,7 +155,7 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
       ws.onclose = () => {
         if (!active) return;
         setIsConnected(false);
-        // Exponential reconnect / safety retry after 3 seconds
+        // Retry connection after 3 seconds
         reconnectTimeoutRef.current = window.setTimeout(() => {
           if (active) connectWs();
         }, 3000);
@@ -165,7 +173,7 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
         wsRef.current.close();
       }
     };
-  }, [timeframe, fetchHistoricalCandles, fetchInitialTicker]);
+  }, [pair, timeframe, fetchHistoricalCandles, fetchInitialTicker]);
 
   return {
     ticker,
@@ -173,6 +181,6 @@ export function useBinanceTrading(timeframe: Timeframe = '1m') {
     currentCandle,
     isConnected,
     latency,
-    refetchCandles: () => fetchHistoricalCandles(timeframe)
+    refetchCandles: () => fetchHistoricalCandles(timeframe, pair.id)
   };
 }

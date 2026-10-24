@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import type { PriceZoneAlert, VolatilityAlertEvent } from '../types/trading';
+import type { PriceZoneAlert, VolatilityAlertEvent, TradingPairConfig } from '../types/trading';
+import { SUPPORTED_PAIRS } from '../types/trading';
 import { soundManager, sendBrowserNotification } from '../utils/audioAlerts';
 import { 
   subscribeToPriceZones, 
@@ -9,24 +10,32 @@ import {
   logAlertHistory 
 } from '../services/dbService';
 
-const ZONES_STORAGE_KEY = 'arpa_trader_zones_v1';
+export function useAlertManager(
+  currentPrice: number | undefined,
+  pair: TradingPairConfig = SUPPORTED_PAIRS[0]
+) {
+  const storageKey = `trader_zones_${pair.id.toLowerCase()}_v1`;
 
-export function useAlertManager(currentPrice: number | undefined) {
-  // 1. Price Zones State (iniciando con localStorage como fallback instantáneo)
+  // 1. Price Zones State per pair
   const [zones, setZones] = useState<PriceZoneAlert[]>(() => {
     try {
-      const saved = localStorage.getItem(ZONES_STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey);
       if (saved) return JSON.parse(saved);
     } catch {
       // fallback
     }
-    return [
-      { id: '1', label: 'Resistencia Clave', price: 0.05500, type: 'resistance', active: true, createdAt: Date.now() },
-      { id: '2', label: 'Soporte Mayor', price: 0.04800, type: 'support', active: true, createdAt: Date.now() },
-    ];
+    return pair.id === 'BELUSDT'
+      ? [
+          { id: 'bel-1', label: 'Resistencia BEL', price: 0.1250, type: 'resistance', active: true, createdAt: Date.now() },
+          { id: 'bel-2', label: 'Soporte BEL', price: 0.0980, type: 'support', active: true, createdAt: Date.now() },
+        ]
+      : [
+          { id: 'arpa-1', label: 'Resistencia Clave', price: 0.05500, type: 'resistance', active: true, createdAt: Date.now() },
+          { id: 'arpa-2', label: 'Soporte Mayor', price: 0.04800, type: 'support', active: true, createdAt: Date.now() },
+        ];
   });
 
-  // 2. Volatility threshold settings (default 0.75% in 60 seconds for ARPA)
+  // 2. Volatility threshold settings (default 0.75% in 60 seconds)
   const [volatilityThreshold, setVolatilityThreshold] = useState<number>(0.75); // %
   const [activeVolatilityAlert, setActiveVolatilityAlert] = useState<VolatilityAlertEvent | null>(null);
   const [activeZoneAlert, setActiveZoneAlert] = useState<PriceZoneAlert | null>(null);
@@ -36,24 +45,54 @@ export function useAlertManager(currentPrice: number | undefined) {
   const lastPriceRef = useRef<number | undefined>(undefined);
   const audioUnlockedRef = useRef<boolean>(false);
 
+  // Reset local state when pair changes
+  useEffect(() => {
+    priceHistoryRef.current = [];
+    lastPriceRef.current = undefined;
+    setActiveVolatilityAlert(null);
+    setActiveZoneAlert(null);
+
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        setZones(JSON.parse(saved));
+        return;
+      }
+    } catch {
+      // fallback
+    }
+
+    setZones(
+      pair.id === 'BELUSDT'
+        ? [
+            { id: 'bel-1', label: 'Resistencia BEL', price: 0.1250, type: 'resistance', active: true, createdAt: Date.now() },
+            { id: 'bel-2', label: 'Soporte BEL', price: 0.0980, type: 'support', active: true, createdAt: Date.now() },
+          ]
+        : [
+            { id: 'arpa-1', label: 'Resistencia Clave', price: 0.05500, type: 'resistance', active: true, createdAt: Date.now() },
+            { id: 'arpa-2', label: 'Soporte Mayor', price: 0.04800, type: 'support', active: true, createdAt: Date.now() },
+          ]
+    );
+  }, [pair.id, storageKey]);
+
   // 3. Sincronización bidireccional en tiempo real con Cloud Firestore
   useEffect(() => {
     const unsubscribe = subscribeToPriceZones((cloudZones) => {
       if (cloudZones && cloudZones.length > 0) {
         setZones(cloudZones);
-        localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(cloudZones));
+        localStorage.setItem(storageKey, JSON.stringify(cloudZones));
       }
     });
 
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, []);
+  }, [storageKey]);
 
   // Save zones to localStorage as local cache
   useEffect(() => {
-    localStorage.setItem(ZONES_STORAGE_KEY, JSON.stringify(zones));
-  }, [zones]);
+    localStorage.setItem(storageKey, JSON.stringify(zones));
+  }, [zones, storageKey]);
 
   // Audio unlock helper for mobile browsers
   const unlockAudio = () => {
@@ -134,8 +173,8 @@ export function useAlertManager(currentPrice: number | undefined) {
 
           setActiveVolatilityAlert(alertEvent);
           soundManager.playVolatilityAlert(direction);
-          sendBrowserNotification(`⚡ Alerta de Volatilidad: ARPA/USDT`, {
-            body: `${direction === 'pump' ? '🚀 PUMP' : '🔻 DUMP'}: ${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}% en ${alertEvent.durationSeconds}s ($${currentPrice})`
+          sendBrowserNotification(`⚡ Alerta de Volatilidad: ${pair.label}`, {
+            body: `${direction === 'pump' ? '🚀 PUMP' : '🔻 DUMP'}: ${changePct > 0 ? '+' : ''}${changePct.toFixed(2)}% en ${alertEvent.durationSeconds}s ($${currentPrice.toFixed(pair.precision)})`
           });
 
           // Registrar en la base de datos de Firebase
@@ -160,8 +199,8 @@ export function useAlertManager(currentPrice: number | undefined) {
           setActiveZoneAlert({ ...zone, triggeredAt: now });
           soundManager.playZoneAlert(zone.type);
 
-          sendBrowserNotification(`🎯 Zona Tocada: ${zone.label}`, {
-            body: `Precio actual: $${currentPrice.toFixed(5)} tocó tu nivel marcado de $${zone.price.toFixed(5)}.`
+          sendBrowserNotification(`🎯 Zona Tocada (${pair.label}): ${zone.label}`, {
+            body: `Precio actual: $${currentPrice.toFixed(pair.precision)} tocó tu nivel marcado de $${zone.price.toFixed(pair.precision)}.`
           });
 
           // Registrar en el historial de Firebase

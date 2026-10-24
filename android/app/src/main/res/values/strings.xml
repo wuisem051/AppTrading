@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">App Trading</string>
+    <string name="title_activity_main">App Trading</string>
+    <string name="package_name">com.apptrading.crypto</string>
+    <string name="custom_url_scheme">com.apptrading.crypto</string>
+</resources>

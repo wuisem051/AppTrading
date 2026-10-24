@@ -7,6 +7,8 @@ interface NotificationBannerProps {
   zoneAlert: PriceZoneAlert | null;
   onDismissVolatility: () => void;
   onDismissZone: () => void;
+  pairLabel?: string;
+  precision?: number;
 }
 
 export const NotificationBanner: React.FC<NotificationBannerProps> = ({
@@ -14,6 +16,8 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
   zoneAlert,
   onDismissVolatility,
   onDismissZone,
+  pairLabel = 'BEL/USDT',
+  precision = 4
 }) => {
   if (!volatilityAlert && !zoneAlert) return null;
 
@@ -41,10 +45,10 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
               </button>
             </div>
             <p className="text-xs mt-1">
-              ARPA/USDT se movió <span className="font-bold font-mono">{volatilityAlert.percentChange > 0 ? '+' : ''}{volatilityAlert.percentChange}%</span> en {volatilityAlert.durationSeconds}s.
+              {pairLabel} se movió <span className="font-bold font-mono">{volatilityAlert.percentChange > 0 ? '+' : ''}{volatilityAlert.percentChange}%</span> en {volatilityAlert.durationSeconds}s.
             </p>
             <div className="text-[11px] font-mono mt-1 opacity-80">
-              De ${volatilityAlert.fromPrice.toFixed(5)} ➔ ${volatilityAlert.toPrice.toFixed(5)}
+              De ${volatilityAlert.fromPrice.toFixed(precision)} ➔ ${volatilityAlert.toPrice.toFixed(precision)}
             </div>
           </div>
         </div>
@@ -71,10 +75,10 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
               </button>
             </div>
             <p className="text-xs mt-1">
-              El precio alcanzó el nivel <span className="font-bold">{zoneAlert.label}</span>.
+              El precio de {pairLabel} alcanzó el nivel <span className="font-bold">{zoneAlert.label}</span>.
             </p>
             <div className="text-[11px] font-mono mt-1 font-semibold">
-              Nivel: ${zoneAlert.price.toFixed(5)}
+              Nivel: ${zoneAlert.price.toFixed(precision)}
             </div>
           </div>
         </div>

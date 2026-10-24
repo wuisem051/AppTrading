@@ -19,6 +19,8 @@ interface AlertZoneManagerProps {
   onDeleteZone: (id: string) => void;
   volatilityThreshold: number;
   onChangeVolatilityThreshold: (val: number) => void;
+  precision?: number;
+  baseAsset?: string;
 }
 
 export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
@@ -28,7 +30,9 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
   onToggleZone,
   onDeleteZone,
   volatilityThreshold,
-  onChangeVolatilityThreshold
+  onChangeVolatilityThreshold,
+  precision = 4,
+  baseAsset = 'Crypto'
 }) => {
   const [priceInput, setPriceInput] = useState<string>('');
   const [labelInput, setLabelInput] = useState<string>('');
@@ -38,7 +42,7 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
     e.preventDefault();
     const parsed = parseFloat(priceInput);
     if (!isNaN(parsed) && parsed > 0) {
-      const defaultLabel = `${zoneType === 'support' ? 'Soporte' : 'Resistencia'} @ ${parsed.toFixed(5)}`;
+      const defaultLabel = `${zoneType === 'support' ? 'Soporte' : 'Resistencia'} @ ${parsed.toFixed(precision)}`;
       onAddZone(parsed, zoneType, labelInput.trim() || defaultLabel);
       setPriceInput('');
       setLabelInput('');
@@ -47,7 +51,7 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
 
   const handleUseCurrentPrice = () => {
     if (currentPrice) {
-      setPriceInput(currentPrice.toFixed(5));
+      setPriceInput(currentPrice.toFixed(precision));
     }
   };
 
@@ -88,7 +92,7 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
           className="w-full accent-amber-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
         />
         <p className="text-[10px] text-slate-500 mt-1">
-          Dispara alarma sonora si ARPA sube o baja este % en menos de 1 minuto.
+          Dispara alarma sonora si {baseAsset} sube o baja este % en menos de 1 minuto.
         </p>
       </div>
 
@@ -124,8 +128,8 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
         <div className="relative">
           <input
             type="number"
-            step="0.00001"
-            placeholder="Precio objetivo (ej. 0.05200)"
+            step="any"
+            placeholder={`Precio objetivo (ej. ${currentPrice ? currentPrice.toFixed(precision) : '0.1100'})`}
             value={priceInput}
             onChange={(e) => setPriceInput(e.target.value)}
             required
@@ -186,7 +190,7 @@ export const AlertZoneManager: React.FC<AlertZoneManagerProps> = ({
                   </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-xs font-mono font-bold">
-                      ${zone.price.toFixed(5)}
+                      ${zone.price.toFixed(precision)}
                     </span>
                     {zone.triggeredAt && (
                       <span className="text-[10px] text-amber-400 bg-amber-400/10 px-1 rounded">
